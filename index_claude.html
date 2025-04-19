@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JSON 스키마 뷰어 및 쿼리 도구</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f7;
+            color: #333;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .section {
+            margin-bottom: 30px;
+        }
+        .section-title {
+            font-size: 1.2em;
+            color: #3498db;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #e0e0e0;
+            padding-bottom: 5px;
+        }
+        textarea {
+            width: 100%;
+            height: 200px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-family: monospace;
+            resize: vertical;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background-color 0.3s;
+            margin-right: 10px;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        .button-container {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .flex-container {
+            display: flex;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .schema-tree, .query-section {
+            flex: 1;
+            height: 400px;
+            overflow: auto;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            background-color: #fff;
+        }
+        .schema-tree {
+            min-width: 300px;
+        }
+        .query-section {
+            display: flex;
+            flex-direction: column;
+        }
+        .query-input {
+            margin-bottom: 10px;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-family: monospace;
+        }
+        #queryResult {
+            flex: 1;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 10px;
+            overflow: auto;
+            background-color: #f9f9f9;
+        }
+        ul.tree, ul.tree ul {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+        ul.tree ul {
+            margin-left: 20px;
+        }
+        ul.tree li {
+            margin: 0;
+            padding: 0 0 0 20px;
+            line-height: 1.5em;
+            position: relative;
+        }
+        ul.tree li::before {
+            content: "├─";
+            position: absolute;
+            left: 0;
+            color: #999;
+        }
+        ul.tree li:last-child::before {
+            content: "└─";
+        }
+        .type-object {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+        .type-array {
+            color: #3498db;
+            font-weight: bold;
+        }
+        .type-string {
+            color: #27ae60;
+        }
+        .type-number {
+            color: #f39c12;
+        }
+        .type-boolean {
+            color: #9b59b6;
+        }
+        .type-null {
+            color: #95a5a6;
+            font-style: italic;
+        }
+        .property-name {
+            font-weight: bold;
+        }
+        .collapsible {
+            cursor: pointer;
+            user-select: none;
+        }
+        .collapsible::after {
+            content: " ▼";
+            font-size: 0.8em;
+            color: #999;
+        }
+        .collapsed::after {
+            content: " ►";
+        }
+        .hidden {
+            display: none;
+        }
+        .path {
+            font-size: 0.8em;
+            color: #7f8c8d;
+            margin-left: 5px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            font-size: 0.9em;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+            position: sticky;
+            top: 0;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        tr:hover {
+            background-color: #f1f1f1;
+        }
+        .query-help {
+            font-size: 0.85em;
+            color: #7f8c8d;
+            margin-top: 10px;
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .tree-node {
+            padding: 3px 0;
+        }
+        .error {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+        .success {
+            color: #27ae60;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>JSON 스키마 뷰어 및 쿼리 도구</h1>
+        
+        <div class="section">
+            <div class="section-title">JSON 데이터 입력</div>
+            <textarea id="jsonInput" placeholder="여기에 JSON 데이터를 붙여넣으세요."></textarea>
+            <div class="button-container">
+                <button id="parseButton">파싱하기</button>
+                <button id="exampleButton">샘플 데이터 불러오기</button>
+                <button id="clearButton">초기화</button>
+            </div>
+        </div>
+        
+        <div class="flex-container">
+            <div class="schema-tree section">
+                <div class="section-title">JSON 스키마 트리</div>
+                <div id="schemaTree"></div>
+            </div>
+            
+            <div class="query-section section">
+                <div class="section-title">쿼리 도구</div>
+                <input type="text" id="queryInput" class="query-input" placeholder="예: $.users[*].name" value="$">
+                <button id="executeQuery">쿼리 실행</button>
+                <div id="queryResult"></div>
+                <div class="query-help">
+                    <strong>쿼리 예시:</strong><br>
+                    - <code>$</code>: 전체 JSON 객체<br>
+                    - <code>$.users</code>: users 배열<br>
+                    - <code>$.users[0]</code>: 첫 번째 사용자<br>
+                    - <code>$.users[*].name</code>: 모든 사용자의 이름<br>
+                    - <code>$.users[?(@.age>30)]</code>: 30세 이상의 사용자<br>
+                    - <code>$.users[?(@.active==true)]</code>: 활성 상태인 사용자<br>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsonpath/0.2.12/jsonpath.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // DOM 요소 가져오기
+            const jsonInput = document.getElementById('jsonInput');
+            const parseButton = document.getElementById('parseButton');
+            const exampleButton = document.getElementById('exampleButton');
+            const clearButton = document.getElementById('clearButton');
+            const schemaTree = document.getElementById('schemaTree');
+            const queryInput = document.getElementById('queryInput');
+            const executeQuery = document.getElementById('executeQuery');
+            const queryResult = document.getElementById('queryResult');
+            
+            // 전역 변수
+            let parsedData = null;
+            
+            // 이벤트 리스너 등록
+            parseButton.addEventListener('click', parseJson);
+            exampleButton.addEventListener('click', loadExampleData);
+            clearButton.addEventListener('click', clearAll);
+            executeQuery.addEventListener('click', runQuery);
+            
+            // JSON 파싱 함수
+            function parseJson() {
+                const jsonText = jsonInput.value.trim();
+                if (!jsonText) {
+                    alert('JSON 데이터를 입력해주세요.');
+                    return;
+                }
+                
+                try {
+                    parsedData = JSON.parse(jsonText);
+                    renderSchemaTree(parsedData);
+                    queryInput.value = '$';
+                    runQuery();
+                } catch (e) {
+                    schemaTree.innerHTML = `<div class="error">JSON 파싱 오류: ${e.message}</div>`;
+                    queryResult.innerHTML = '';
+                    parsedData = null;
+                }
+            }
+            
+            // 스키마 트리 렌더링
+            function renderSchemaTree(data) {
+                schemaTree.innerHTML = '';
+                const rootType = getType(data);
+                const rootNode = document.createElement('ul');
+                rootNode.className = 'tree';
+                
+                const rootLi = document.createElement('li');
+                rootLi.className = 'tree-node';
+                
+                const rootSpan = document.createElement('span');
+                rootSpan.className = `type-${rootType.toLowerCase()}`;
+                rootSpan.textContent = `Root (${rootType})`;
+                
+                if (rootType === 'Object' || rootType === 'Array') {
+                    rootSpan.className += ' collapsible';
+                    rootSpan.addEventListener('click', toggleCollapse);
+                }
+                
+                rootLi.appendChild(rootSpan);
+                
+                const childrenContainer = document.createElement('ul');
+                
+                if (rootType === 'Object') {
+                    Object.keys(data).forEach(key => {
+                        const childNode = createSchemaNode(key, data[key], '$.' + key);
+                        childrenContainer.appendChild(childNode);
+                    });
+                } else if (rootType === 'Array') {
+                    data.forEach((item, index) => {
+                        const childNode = createSchemaNode(`[${index}]`, item, `$[${index}]`);
+                        childrenContainer.appendChild(childNode);
+                    });
+                }
+                
+                rootLi.appendChild(childrenContainer);
+                rootNode.appendChild(rootLi);
+                schemaTree.appendChild(rootNode);
+            }
+            
+            // 스키마 노드 생성
+            function createSchemaNode(key, value, path) {
+                const type = getType(value);
+                const li = document.createElement('li');
+                li.className = 'tree-node';
+                
+                const keySpan = document.createElement('span');
+                keySpan.className = 'property-name';
+                keySpan.textContent = key;
+                
+                const typeSpan = document.createElement('span');
+                typeSpan.className = `type-${type.toLowerCase()}`;
+                typeSpan.textContent = ` (${type})`;
+                
+                const pathSpan = document.createElement('span');
+                pathSpan.className = 'path';
+                pathSpan.textContent = path;
+                
+                li.appendChild(keySpan);
+                li.appendChild(typeSpan);
+                li.appendChild(pathSpan);
+                
+                if (type === 'Object' || type === 'Array') {
+                    keySpan.className += ' collapsible';
+                    keySpan.addEventListener('click', toggleCollapse);
+                    
+                    const childrenContainer = document.createElement('ul');
+                    
+                    if (type === 'Object') {
+                        Object.keys(value).forEach(childKey => {
+                            const childNode = createSchemaNode(childKey, value[childKey], `${path}.${childKey}`);
+                            childrenContainer.appendChild(childNode);
+                        });
+                    } else if (type === 'Array') {
+                        value.forEach((item, index) => {
+                            const childNode = createSchemaNode(`[${index}]`, item, `${path}[${index}]`);
+                            childrenContainer.appendChild(childNode);
+                        });
+                    }
+                    
+                    li.appendChild(childrenContainer);
+                } else {
+                    // 기본 값 표시 (간단한 타입)
+                    if (type !== 'null' && type !== 'undefined') {
+                        const valuePreview = type === 'String' ? `"${truncate(value, 30)}"` : value;
+                        const valueSpan = document.createElement('span');
+                        valueSpan.textContent = ` = ${valuePreview}`;
+                        li.appendChild(valueSpan);
+                    }
+                }
+                
+                return li;
+            }
+            
+            // 토글 접기/펼치기
+            function toggleCollapse(e) {
+                e.target.classList.toggle('collapsed');
+                const ul = e.target.parentNode.querySelector('ul');
+                if (ul) {
+                    ul.classList.toggle('hidden');
+                }
+            }
+            
+            // 데이터 타입 가져오기
+            function getType(value) {
+                if (value === null) return 'Null';
+                if (value === undefined) return 'Undefined';
+                if (Array.isArray(value)) return 'Array';
+                if (typeof value === 'object') return 'Object';
+                if (typeof value === 'string') return 'String';
+                if (typeof value === 'number') return 'Number';
+                if (typeof value === 'boolean') return 'Boolean';
+                return typeof value;
+            }
+            
+            // 텍스트 길이 제한
+            function truncate(str, maxLength) {
+                if (str === null || str === undefined) return '';
+                str = String(str);
+                return str.length > maxLength ? str.substring(0, maxLength) + '...' : str;
+            }
+            
+            // 쿼리 실행
+            function runQuery() {
+                const query = queryInput.value.trim();
+                if (!parsedData) {
+                    queryResult.innerHTML = '<div class="error">JSON 데이터를 먼저 파싱해주세요.</div>';
+                    return;
+                }
+                
+                if (!query) {
+                    queryResult.innerHTML = '<div class="error">쿼리를 입력해주세요.</div>';
+                    return;
+                }
+                
+                try {
+                    const result = jsonpath.query(parsedData, query);
+                    displayQueryResult(result);
+                } catch (e) {
+                    queryResult.innerHTML = `<div class="error">쿼리 오류: ${e.message}</div>`;
+                }
+            }
+            
+            // 쿼리 결과 표시
+            function displayQueryResult(result) {
+                if (!result || result.length === 0) {
+                    queryResult.innerHTML = '<div class="error">결과가 없습니다.</div>';
+                    return;
+                }
+                
+                // 쿼리 결과 타입에 따라 다른 방식으로 표시
+                const resultType = getType(result);
+                
+                if (resultType === 'Array' && result.length > 0 && typeof result[0] === 'object' && result[0] !== null) {
+                    // 객체 배열인 경우 테이블로 표시
+                    displayAsTable(result);
+                } else {
+                    // 그 외의 경우 JSON으로 표시
+                    const pre = document.createElement('pre');
+                    pre.textContent = JSON.stringify(result, null, 2);
+                    queryResult.innerHTML = '';
+                    queryResult.appendChild(pre);
+                    
+                    // 다운로드 버튼 추가
+                    const downloadBtn = document.createElement('button');
+                    downloadBtn.textContent = '결과 다운로드 (JSON)';
+                    downloadBtn.addEventListener('click', () => downloadJSON(result));
+                    queryResult.prepend(downloadBtn);
+                }
+            }
+            
+            // 테이블로 표시
+            function displayAsTable(data) {
+                if (!Array.isArray(data) || data.length === 0) {
+                    queryResult.innerHTML = '<div class="error">테이블로 표시할 데이터가 없습니다.</div>';
+                    return;
+                }
+                
+                // 모든 객체의 키 수집
+                let allKeys = new Set();
+                data.forEach(item => {
+                    if (typeof item === 'object' && item !== null) {
+                        Object.keys(item).forEach(key => allKeys.add(key));
+                    }
+                });
+                
+                // 키가 없을 경우
+                if (allKeys.size === 0) {
+                    queryResult.innerHTML = '<div class="error">테이블로 표시할 속성이 없습니다.</div>';
+                    return;
+                }
+                
+                allKeys = Array.from(allKeys);
+                
+                const table = document.createElement('table');
+                
+                // 테이블 헤더
+                const thead = document.createElement('thead');
+                const headerRow = document.createElement('tr');
+                
+                allKeys.forEach(key => {
+                    const th = document.createElement('th');
+                    th.textContent = key;
+                    headerRow.appendChild(th);
+                });
+                
+                thead.appendChild(headerRow);
+                table.appendChild(thead);
+                
+                // 테이블 본문
+                const tbody = document.createElement('tbody');
+                
+                data.forEach(item => {
+                    const row = document.createElement('tr');
+                    
+                    allKeys.forEach(key => {
+                        const cell = document.createElement('td');
+                        
+                        if (typeof item === 'object' && item !== null && key in item) {
+                            const value = item[key];
+                            
+                            if (value === null || value === undefined) {
+                                cell.textContent = '';
+                            } else if (typeof value === 'object') {
+                                // 객체인 경우 JSON으로 표시
+                                cell.textContent = JSON.stringify(value);
+                            } else {
+                                cell.textContent = value;
+                            }
+                        } else {
+                            cell.textContent = '';
+                        }
+                        
+                        row.appendChild(cell);
+                    });
+                    
+                    tbody.appendChild(row);
+                });
+                
+                table.appendChild(tbody);
+                
+                // 결과 표시
+                queryResult.innerHTML = '';
+                
+                // 다운로드 버튼 추가
+                const downloadJsonBtn = document.createElement('button');
+                downloadJsonBtn.textContent = '결과 다운로드 (JSON)';
+                downloadJsonBtn.addEventListener('click', () => downloadJSON(data));
+                queryResult.appendChild(downloadJsonBtn);
+                
+                const downloadCsvBtn = document.createElement('button');
+                downloadCsvBtn.textContent = '결과 다운로드 (CSV)';
+                downloadCsvBtn.addEventListener('click', () => downloadCSV(data, allKeys));
+                queryResult.appendChild(downloadCsvBtn);
+                
+                const downloadExcelBtn = document.createElement('button');
+                downloadExcelBtn.textContent = '결과 다운로드 (Excel)';
+                downloadExcelBtn.addEventListener('click', () => downloadExcel(data, allKeys));
+                queryResult.appendChild(downloadExcelBtn);
+                
+                queryResult.appendChild(table);
+            }
+            
+            // JSON 파일 다운로드
+            function downloadJSON(data) {
+                const content = JSON.stringify(data, null, 2);
+                downloadFile(content, 'query_result.json', 'application/json');
+            }
+            
+            // CSV 파일 다운로드
+            function downloadCSV(data, headers) {
+                if (!Array.isArray(data) || data.length === 0) return;
+                
+                // CSV 헤더
+                let csvContent = headers.join(',') + '\n';
+                
+                // CSV 본문
+                data.forEach(item => {
+                    const row = headers.map(header => {
+                        const value = item[header];
+                        
+                        if (value === null || value === undefined) {
+                            return '';
+                        } else if (typeof value === 'object') {
+                            return `"${JSON.stringify(value).replace(/"/g, '""')}"`;
+                        } else {
+                            return typeof value === 'string' ? `"${value.replace(/"/g, '""')}"` : value;
+                        }
+                    }).join(',');
+                    
+                    csvContent += row + '\n';
+                });
+                
+                downloadFile(csvContent, 'query_result.csv', 'text/csv');
+            }
+            
+            // Excel 파일 다운로드 (CSV 형식)
+            function downloadExcel(data, headers) {
+                if (!Array.isArray(data) || data.length === 0) return;
+                
+                // Excel에서 인식할 수 있는 UTF-8 BOM 추가
+                let csvContent = '\ufeff';
+                
+                // 헤더
+                csvContent += headers.join(',') + '\n';
+                
+                // 본문
+                data.forEach(item => {
+                    const row = headers.map(header => {
+                        const value = item[header];
+                        
+                        if (value === null || value === undefined) {
+                            return '';
+                        } else if (typeof value === 'object') {
+                            return `"${JSON.stringify(value).replace(/"/g, '""')}"`;
+                        } else {
+                            return typeof value === 'string' ? `"${value.replace(/"/g, '""')}"` : value;
+                        }
+                    }).join(',');
+                    
+                    csvContent += row + '\n';
+                });
+                
+                downloadFile(csvContent, 'query_result.xls', 'application/vnd.ms-excel');
+            }
+            
+            // 파일 다운로드 함수
+            function downloadFile(content, fileName, mimeType) {
+                const blob = new Blob([content], { type: mimeType });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = fileName;
+                link.click();
+                URL.revokeObjectURL(link.href);
+            }
+            
+            // 예제 데이터 로드
+            function loadExampleData() {
+                const exampleData = {
+                    "users": [
+                        {
+                            "id": 1,
+                            "name": "김철수",
+                            "email": "kim@example.com",
+                            "age": 28,
+                            "active": true,
+                            "address": {
+                                "city": "서울",
+                                "street": "강남대로 123",
+                                "zipcode": "06001"
+                            },
+                            "orders": [
+                                {
+                                    "id": 101,
+                                    "product": "노트북",
+                                    "price": 1200000,
+                                    "date": "2023-01-15"
+                                },
+                                {
+                                    "id": 102,
+                                    "product": "모니터",
+                                    "price": 350000,
+                                    "date": "2023-02-20"
+                                }
+                            ]
+                        },
+                        {
+                            "id": 2,
+                            "name": "이영희",
+                            "email": "lee@example.com",
+                            "age": 35,
+                            "active": true,
+                            "address": {
+                                "city": "부산",
+                                "street": "해운대로 456",
+                                "zipcode": "48100"
+                            },
+                            "orders": [
+                                {
+                                    "id": 103,
+                                    "product": "스마트폰",
+                                    "price": 980000,
+                                    "date": "2023-03-10"
+                                }
+                            ]
+                        },
+                        {
+                            "id": 3,
+                            "name": "박민수",
+                            "email": "park@example.com",
+                            "age": 42,
+                            "active": false,
+                            "address": {
+                                "city": "대전",
+                                "street": "대덕대로 789",
+                                "zipcode": "34126"
+                            },
+                            "orders": []
+                        }
+                    ],
+                    "products": [
+                        {
+                            "id": 1001,
+                            "name": "노트북",
+                            "category": "전자제품",
+                            "price": 1200000,
+                            "stock": 50,
+                            "specs": {
+                                "brand": "삼성",
+                                "model": "갤럭시북",
+                                "cpu": "i7-1165G7",
+                                "ram": "16GB",
+                                "storage": "512GB SSD",
+                                "display": "15.6인치 FHD"
+                            }
+                        },
+                        {
+                            "id": 1002,
+                            "name": "모니터",
+                            "category": "전자제품",
+                            "price": 350000,
+                            "stock": 100,
+                            "specs": {
+                                "brand": "LG",
+                                "model": "울트라기어",
+                                "size": "27인치",
+                                "resolution": "2560x1440",
+                                "refreshRate": "144Hz"
+                            }
+                        },
+                        {
+                            "id": 1003,
+                            "name": "스마트폰",
+                            "category": "전자제품",
+                            "price": 980000,
+                            "stock": 200,
+                            "specs": {
+                                "brand": "애플",
+                                "model": "아이폰 13",
+                                "cpu": "A15 Bionic",
+                                "ram": "4GB",
+                                "storage": "128GB",
+                                "display": "6.1인치 OLED"
+                            }
+                        },
+                        {
+                            "id": 1004,
+                            "name": "커피머신",
+                            "category": "가전제품",
+                            "price": 250000,
+                            "stock": 30,
+                            "specs": {
+                                "brand": "네스프레소",
+                                "model": "버츄오",
+                                "type": "캡슐",
+                                "pressure": "19 bar"
+                            }
+                        }
+                    ],
+                    "stats": {
+                        "totalUsers": 3,
+                        "activeUsers": 2,
+                        "totalProducts": 4,
+                        "totalOrders": 3,
+                        "revenue": {
+                            "total": 2530000,
+                            "monthly": {
+                                "Jan": 1200000,
+                                "Feb": 350000,
+                                "Mar": 980000
+                            }
+                        }
+                    }
+                };
+                
+                jsonInput.value = JSON.stringify(exampleData, null, 2);
+                parseJson();
+            }
+            
+            // 모든 데이터 초기화
+            function clearAll() {
+                jsonInput.value = '';
+                schemaTree.innerHTML = '';
+                queryResult.innerHTML = '';
+                queryInput.value = '$';
+                parsedData = null;
+            }
+        });
+    </script>
+</body>
+</html>
